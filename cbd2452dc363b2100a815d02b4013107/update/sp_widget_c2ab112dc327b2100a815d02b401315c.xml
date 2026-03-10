@@ -1,13 +1,55 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[api.controller = function() {
+        <client_script><![CDATA[api.controller = function($window, spUtil) {
   var c = this;
+
   c.getBadgeClass = function(index) {
     if (index === 0) return 'label label-primary';
     if (index === 1) return 'label label-success';
     if (index === 2) return 'label label-info';
     return 'label label-default';
+  };
+
+  c.showCreateModal = false;
+  c.newPrompt = '';
+  c.isCreating = false;
+  c.errorMessage = '';
+
+  c.openCreateModal = function() {
+    c.errorMessage = '';
+    c.newPrompt = '';
+    c.showCreateModal = true;
+  };
+
+  c.closeCreateModal = function() {
+    if (c.isCreating) return;
+    c.showCreateModal = false;
+  };
+
+  c.createPrompt = function() {
+    if (!c.newPrompt || c.isCreating) {
+      return;
+    }
+    c.isCreating = true;
+    c.errorMessage = '';
+
+    spUtil.get('prompt_list', {
+      action: 'create',
+      prompt: c.newPrompt
+    }).then(function(response) {
+      if (response && response.data) {
+        if (response.data.error) {
+          c.errorMessage = response.data.error;
+          return;
+        }
+        if (response.data.sys_id) {
+          $window.location.href = '/sp?id=prompt_record&sys_id=' + response.data.sys_id;
+        }
+      }
+    }).finally(function() {
+      c.isCreating = false;
+    });
   };
 };]]></client_script>
         <controller_as>c</controller_as>
@@ -26,9 +68,29 @@
         <public>false</public>
         <roles/>
         <script><![CDATA[(function() {
-  // Server script: load prompt records for portal
-  data.records = [];
+  // Server script: load prompt records for portal or create new one
+  data.records = data.records || [];
 
+  // Handle create from client
+  if (input && input.action === 'create') {
+    var content = (input.prompt || '').toString();
+    if (!content) {
+      data.error = 'Prompt content is required.';
+      return;
+    }
+
+    var createGr = new GlideRecord('x_107457_test_prompt');
+    createGr.initialize();
+    createGr.setValue('prompt', content);
+    createGr.setValue('user', gs.getUserID());
+    createGr.setValue('display_on_portal', true);
+    var newSysId = createGr.insert();
+
+    data.sys_id = newSysId;
+    return;
+  }
+
+  // Default: list existing prompts
   var gr = new GlideRecord('x_107457_test_prompt');
   gr.addQuery('display_on_portal', true);
   gr.orderByDesc('sys_created_on');
@@ -61,10 +123,18 @@
         <sys_updated_on>2026-03-10 15:12:14</sys_updated_on>
         <template><![CDATA[<div class="panel panel-default prompt-widget">
   <div class="panel-heading">
-    <h3 class="panel-title">
-      <span class="fa fa-magic m-r-xs"></span>
-      Recent prompts
-    </h3>
+    <div class="clearfix">
+      <h3 class="panel-title pull-left">
+        <span class="fa fa-magic m-r-xs"></span>
+        Recent prompts
+      </h3>
+      <button class="btn btn-primary btn-sm pull-right"
+              type="button"
+              ng-click="c.openCreateModal()">
+        <span class="fa fa-plus m-r-xs"></span>
+        Create New
+      </button>
+    </div>
   </div>
   <div class="panel-body" ng-if="!data.records || data.records.length === 0">
     <div class="text-muted text-center">
@@ -101,6 +171,57 @@
         </div>
       </div>
     </a>
+  </div>
+
+  <!-- Create New Prompt modal -->
+  <div class="modal fade in"
+       ng-if="c.showCreateModal"
+       style="display:block; background: rgba(0,0,0,0.3);">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <button type="button"
+                  class="close"
+                  ng-click="c.closeCreateModal()"
+                  aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+          <h4 class="modal-title">
+            <span class="fa fa-plus m-r-xs"></span>
+            Create New Prompt
+          </h4>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="control-label text-muted">Prompt</label>
+            <textarea class="form-control"
+                      rows="6"
+                      ng-model="c.newPrompt"
+                      placeholder="Type your prompt here..."></textarea>
+          </div>
+
+          <div class="alert alert-danger" ng-if="c.errorMessage">
+            {{ c.errorMessage }}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button"
+                  class="btn btn-default"
+                  ng-click="c.closeCreateModal()"
+                  ng-disabled="c.isCreating">
+            Cancel
+          </button>
+          <button type="button"
+                  class="btn btn-primary"
+                  ng-click="c.createPrompt()"
+                  ng-disabled="c.isCreating || !c.newPrompt">
+            <span class="fa fa-spinner fa-spin m-r-xs" ng-if="c.isCreating"></span>
+            <span class="fa fa-check m-r-xs" ng-if="!c.isCreating"></span>
+            {{ c.isCreating ? 'Creating...' : 'Create' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>]]></template>
     </sp_widget>

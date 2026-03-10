@@ -1,10 +1,64 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[api.controller = function() {
+        <client_script><![CDATA[api.controller = function($scope, spUtil) {
   var c = this;
+
   c.hasRecord = function() {
     return !!c.data.record && !!c.data.record.sys_id;
+  };
+
+  c.isProcessing = false;
+  c.isSaving = false;
+
+  c.processPrompt = function() {
+    if (!c.hasRecord() || c.isProcessing) {
+      return;
+    }
+    c.isProcessing = true;
+    c.errorMessage = '';
+
+    spUtil.get('prompt_record', {
+      action: 'process',
+      sys_id: c.data.record.sys_id
+    }).then(function(response) {
+      if (response && response.data) {
+        if (response.data.error) {
+          c.errorMessage = response.data.error;
+        }
+        if (response.data.record) {
+          c.data.record = response.data.record;
+        }
+      }
+    }).finally(function() {
+      c.isProcessing = false;
+    });
+  };
+
+  c.save = function() {
+    if (!c.hasRecord() || c.isSaving) {
+      return;
+    }
+    c.isSaving = true;
+    c.errorMessage = '';
+
+    spUtil.get('prompt_record', {
+      action: 'save',
+      sys_id: c.data.record.sys_id,
+      prompt: c.data.record.prompt,
+      result: c.data.record.result
+    }).then(function(response) {
+      if (response && response.data) {
+        if (response.data.error) {
+          c.errorMessage = response.data.error;
+        }
+        if (response.data.record) {
+          c.data.record = response.data.record;
+        }
+      }
+    }).finally(function() {
+      c.isSaving = false;
+    });
   };
 };]]></client_script>
         <controller_as>c</controller_as>
@@ -25,6 +79,60 @@
         <script><![CDATA[(function() {
   // Read sys_id from URL: /sp?id=prompt_record&sys_id=...
   data.record = {};
+
+  // Handle action from client (process integration)
+  if (input && input.action === 'process' && input.sys_id) {
+    var current = new GlideRecord('x_107457_test_prompt');
+    if (current.get(input.sys_id)) {
+      current.update();
+      new x_107457_test.PromptUtils().execute(current);
+
+      data.record = {
+        sys_id: current.getUniqueValue(),
+        number: current.getDisplayValue('number') || '',
+        user: current.getDisplayValue('user'),
+        article: current.getDisplayValue('article'),
+        prompt: current.getDisplayValue('prompt'),
+        result: current.getDisplayValue('result'),
+        summary: current.getDisplayValue('summary'),
+        created_on: current.getDisplayValue('sys_created_on'),
+        updated_on: current.getDisplayValue('sys_updated_on')
+      };
+    } else {
+      data.error = 'Prompt record not found.';
+    }
+    return;
+  }
+
+  // Handle save from client
+  if (input && input.action === 'save' && input.sys_id) {
+    var saveGr = new GlideRecord('x_107457_test_prompt');
+    if (saveGr.get(input.sys_id)) {
+      if (typeof input.prompt === 'string') {
+        saveGr.setValue('prompt', input.prompt);
+      }
+      if (typeof input.result === 'string') {
+        saveGr.setValue('result', input.result);
+      }
+      saveGr.update();
+
+      data.record = {
+        sys_id: saveGr.getUniqueValue(),
+        number: saveGr.getDisplayValue('number') || '',
+        user: saveGr.getDisplayValue('user'),
+        article: saveGr.getDisplayValue('article'),
+        prompt: saveGr.getDisplayValue('prompt'),
+        result: saveGr.getDisplayValue('result'),
+        summary: saveGr.getDisplayValue('summary'),
+        created_on: saveGr.getDisplayValue('sys_created_on'),
+        updated_on: saveGr.getDisplayValue('sys_updated_on')
+      };
+    } else {
+      data.error = 'Prompt record not found.';
+    }
+    return;
+  }
+
   var sysId = $sp.getParameter('sys_id');
 
   if (!sysId) {
@@ -85,6 +193,31 @@
   </div>
 
   <div class="panel-body" ng-if="!data.error && c.hasRecord()">
+    <div class="m-b-md clearfix">
+      <div class="pull-left">
+        <button class="btn btn-default"
+                ng-click="c.save()"
+                ng-disabled="c.isSaving">
+          <span class="fa fa-save m-r-xs" ng-if="!c.isSaving"></span>
+          <span class="fa fa-spinner fa-spin m-r-xs" ng-if="c.isSaving"></span>
+          {{ c.isSaving ? 'Saving...' : 'Save' }}
+        </button>
+      </div>
+      <div class="pull-right">
+        <button class="btn btn-primary"
+                ng-click="c.processPrompt()"
+                ng-disabled="c.isProcessing">
+          <span class="fa fa-rocket m-r-xs" ng-if="!c.isProcessing"></span>
+          <span class="fa fa-spinner fa-spin m-r-xs" ng-if="c.isProcessing"></span>
+          {{ c.isProcessing ? 'Processing...' : 'Process with AI' }}
+        </button>
+      </div>
+    </div>
+
+    <div class="alert alert-danger" ng-if="c.errorMessage">
+      {{ c.errorMessage }}
+    </div>
+
     <div class="row">
       <div class="col-md-6">
         <div class="form-group">
@@ -134,12 +267,27 @@
 
     <div class="form-group">
       <label class="control-label text-muted">Prompt</label>
-      <textarea class="form-control" rows="5" readonly>{{::data.record.prompt}}</textarea>
+      <textarea class="form-control"
+                rows="5"
+                ng-model="c.data.record.prompt"></textarea>
     </div>
 
     <div class="form-group">
       <label class="control-label text-muted">Result</label>
-      <textarea class="form-control" rows="8" readonly>{{::data.record.result}}</textarea>
+      <textarea class="form-control"
+                rows="8"
+                ng-model="c.data.record.result"></textarea>
+    </div>
+
+    <hr/>
+
+    <div class="form-group">
+      <label class="control-label text-muted">Activity</label>
+      <div class="well well-sm">
+        <sp-activity-stream table="x_107457_test_prompt"
+                            query="sys_id={{::c.data.record.sys_id}}">
+        </sp-activity-stream>
+      </div>
     </div>
   </div>
 </div>]]></template>
