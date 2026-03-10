@@ -18,10 +18,10 @@
         <docs/>
         <field_list/>
         <has_preview>false</has_preview>
-        <id>prompt-widget</id>
+        <id>prompt_list</id>
         <internal>false</internal>
         <link><![CDATA[function link(scope, element, attrs, controller) {  }]]></link>
-        <name>Prompt</name>
+        <name>Prompt List</name>
         <option_schema/>
         <public>false</public>
         <roles/>
@@ -52,7 +52,7 @@
         <sys_created_on>2026-03-10 15:12:14</sys_created_on>
         <sys_id>c2ab112dc327b2100a815d02b401315c</sys_id>
         <sys_mod_count>0</sys_mod_count>
-        <sys_name>Prompt</sys_name>
+        <sys_name>Prompt List</sys_name>
         <sys_package display_value="TEST" source="x_107457_test">cbd2452dc363b2100a815d02b4013107</sys_package>
         <sys_policy/>
         <sys_scope display_value="TEST">cbd2452dc363b2100a815d02b4013107</sys_scope>
@@ -73,7 +73,9 @@
     </div>
   </div>
   <div class="list-group list-group-flush" ng-if="data.records && data.records.length">
-    <a class="list-group-item" ng-repeat="r in data.records track by r.sys_id">
+    <a class="list-group-item"
+       ng-repeat="r in data.records track by r.sys_id"
+       ng-href="/sp?id=prompt_record&amp;sys_id={{::r.sys_id}}">
       <div class="clearfix m-b-xs">
         <span class="pull-left text-muted">
           <span class="fa fa-user m-r-xs"></span>{{::r.user || 'Anonymous'}}

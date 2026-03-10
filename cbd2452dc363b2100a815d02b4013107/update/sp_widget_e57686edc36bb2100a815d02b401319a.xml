@@ -1,7 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[api.controller=function() {  /* widget controller */  var c = this;};]]></client_script>
+        <client_script><![CDATA[api.controller = function() {
+  var c = this;
+  c.hasRecord = function() {
+    return !!c.data.record && !!c.data.record.sys_id;
+  };
+};]]></client_script>
         <controller_as>c</controller_as>
         <css/>
         <data_table>sp_instance</data_table>
@@ -17,7 +22,34 @@
         <option_schema/>
         <public>false</public>
         <roles/>
-        <script><![CDATA[(function() {  /* populate the 'data' object */  /* e.g., data.table = $sp.getValue('table'); */})();]]></script>
+        <script><![CDATA[(function() {
+  // Read sys_id from URL: /sp?id=prompt_record&sys_id=...
+  data.record = {};
+  var sysId = $sp.getParameter('sys_id');
+
+  if (!sysId) {
+    data.error = 'No record specified.';
+    return;
+  }
+
+  var gr = new GlideRecord('x_107457_test_prompt');
+  if (!gr.get(sysId)) {
+    data.error = 'Prompt record not found.';
+    return;
+  }
+
+  data.record = {
+    sys_id: gr.getUniqueValue(),
+    number: gr.getDisplayValue('number') || '',
+    user: gr.getDisplayValue('user'),
+    article: gr.getDisplayValue('article'),
+    prompt: gr.getDisplayValue('prompt'),
+    result: gr.getDisplayValue('result'),
+    summary: gr.getDisplayValue('summary'),
+    created_on: gr.getDisplayValue('sys_created_on'),
+    updated_on: gr.getDisplayValue('sys_updated_on')
+  };
+})();]]></script>
         <servicenow>false</servicenow>
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>admin</sys_created_by>
@@ -31,7 +63,86 @@
         <sys_update_name>sp_widget_e57686edc36bb2100a815d02b401319a</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2026-03-10 18:19:15</sys_updated_on>
-        <template><![CDATA[<div><!-- your widget template --></div>]]></template>
+        <template><![CDATA[<div class="prompt-record panel panel-default">
+  <div class="panel-heading">
+    <h3 class="panel-title">
+      <span class="fa fa-file-text-o m-r-xs"></span>
+      Prompt details
+    </h3>
+  </div>
+
+  <div class="panel-body" ng-if="data.error">
+    <div class="alert alert-warning m-b-0">
+      {{::data.error}}
+    </div>
+  </div>
+
+  <div class="panel-body" ng-if="!data.error && !c.hasRecord()">
+    <div class="text-center text-muted">
+      <span class="fa fa-spinner fa-spin m-r-xs"></span>
+      Loading record...
+    </div>
+  </div>
+
+  <div class="panel-body" ng-if="!data.error && c.hasRecord()">
+    <div class="row">
+      <div class="col-md-6">
+        <div class="form-group">
+          <label class="control-label text-muted">User</label>
+          <div class="form-control-static">
+            <span class="fa fa-user m-r-xs"></span>{{::data.record.user || 'Anonymous'}}
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="form-group">
+          <label class="control-label text-muted">KB Article</label>
+          <div class="form-control-static">
+            <span class="fa fa-book m-r-xs"></span>{{::data.record.article || 'No KB linked'}}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-md-6">
+        <div class="form-group">
+          <label class="control-label text-muted">Created on</label>
+          <div class="form-control-static">
+            <span class="fa fa-clock-o m-r-xs"></span>{{::data.record.created_on}}
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="form-group">
+          <label class="control-label text-muted">Last updated</label>
+          <div class="form-control-static">
+            <span class="fa fa-refresh m-r-xs"></span>{{::data.record.updated_on}}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <hr/>
+
+    <div class="form-group" ng-if="data.record.summary">
+      <label class="control-label text-muted">Summary</label>
+      <div class="well well-sm">
+        {{::data.record.summary}}
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="control-label text-muted">Prompt</label>
+      <textarea class="form-control" rows="5" readonly>{{::data.record.prompt}}</textarea>
+    </div>
+
+    <div class="form-group">
+      <label class="control-label text-muted">Result</label>
+      <textarea class="form-control" rows="8" readonly>{{::data.record.result}}</textarea>
+    </div>
+  </div>
+</div>]]></template>
     </sp_widget>
     <sys_es_latest_script action="INSERT_OR_UPDATE">
         <id>e57686edc36bb2100a815d02b401319a</id>
