@@ -5,7 +5,7 @@
         <draft>false</draft>
         <dynamic_title_structure/>
         <human_readable_url_structure/>
-        <id>prompt_list</id>
+        <id>prompt_record</id>
         <internal>false</internal>
         <omit_watcher>false</omit_watcher>
         <public>false</public>
@@ -14,18 +14,18 @@
         <short_description/>
         <sys_class_name>sp_page</sys_class_name>
         <sys_created_by>admin</sys_created_by>
-        <sys_created_on>2026-03-10 15:12:14</sys_created_on>
-        <sys_id>46ab992dc327b2100a815d02b40131bd</sys_id>
-        <sys_mod_count>2</sys_mod_count>
-        <sys_name>prompt_list</sys_name>
+        <sys_created_on>2026-03-10 18:19:15</sys_created_on>
+        <sys_id>e17686edc36bb2100a815d02b40131a2</sys_id>
+        <sys_mod_count>1</sys_mod_count>
+        <sys_name>prompt_record</sys_name>
         <sys_package display_value="TEST" source="x_107457_test">cbd2452dc363b2100a815d02b4013107</sys_package>
         <sys_policy/>
         <sys_scope display_value="TEST">cbd2452dc363b2100a815d02b4013107</sys_scope>
-        <sys_update_name>sp_page_46ab992dc327b2100a815d02b40131bd</sys_update_name>
+        <sys_update_name>sp_page_e17686edc36bb2100a815d02b40131a2</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-03-10 18:18:29</sys_updated_on>
-        <title>Prompt List</title>
+        <sys_updated_on>2026-03-10 18:20:42</sys_updated_on>
+        <title>Prompt Record</title>
         <use_seo_script>false</use_seo_script>
     </sp_page>
-    <sys_translated_text action="delete_multiple" query="documentkey=46ab992dc327b2100a815d02b40131bd"/>
+    <sys_translated_text action="delete_multiple" query="documentkey=e17686edc36bb2100a815d02b40131a2"/>
 </record_update>

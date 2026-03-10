@@ -6,23 +6,23 @@
         <bootstrap_alt>false</bootstrap_alt>
         <class_name/>
         <container_class_name/>
-        <name>Prompt List - Container 1</name>
+        <name>Prompt Record - Container 1</name>
         <order>1</order>
         <semantic_tag/>
-        <sp_page display_value="prompt_list">46ab992dc327b2100a815d02b40131bd</sp_page>
+        <sp_page display_value="prompt_record">e17686edc36bb2100a815d02b40131a2</sp_page>
         <subheader>false</subheader>
         <sys_class_name>sp_container</sys_class_name>
         <sys_created_by>admin</sys_created_by>
-        <sys_created_on>2026-03-10 15:12:14</sys_created_on>
-        <sys_id>8aab992dc327b2100a815d02b40131c3</sys_id>
+        <sys_created_on>2026-03-10 18:19:15</sys_created_on>
+        <sys_id>ed7686edc36bb2100a815d02b40131a6</sys_id>
         <sys_mod_count>1</sys_mod_count>
-        <sys_name>Prompt List - Container 1</sys_name>
+        <sys_name>Prompt Record - Container 1</sys_name>
         <sys_package display_value="TEST" source="x_107457_test">cbd2452dc363b2100a815d02b4013107</sys_package>
         <sys_policy/>
         <sys_scope display_value="TEST">cbd2452dc363b2100a815d02b4013107</sys_scope>
-        <sys_update_name>sp_container_8aab992dc327b2100a815d02b40131c3</sys_update_name>
+        <sys_update_name>sp_container_ed7686edc36bb2100a815d02b40131a6</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-03-10 18:18:29</sys_updated_on>
+        <sys_updated_on>2026-03-10 18:20:42</sys_updated_on>
         <title/>
         <width>container</width>
     </sp_container>
