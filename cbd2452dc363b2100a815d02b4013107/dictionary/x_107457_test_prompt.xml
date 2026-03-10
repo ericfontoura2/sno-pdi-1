@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?><database>
-    <element db_object_id="1f43456dc363b2100a815d02b4013133" label="Prompt" max_length="40" name="x_107457_test_prompt" type="collection">
+    <element audit="true" db_object_id="1f43456dc363b2100a815d02b4013133" label="Prompt" max_length="40" name="x_107457_test_prompt" type="collection">
         <element label="Result" max_length="4000" name="result" type="string"/>
         <element label="Prompt" max_length="4000" name="prompt" type="string"/>
         <element label="Summary" max_length="500" name="summary" type="string"/>
