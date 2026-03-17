@@ -1,0 +1,889 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_107457_test.PortalPagamentos</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <mobile_callable>false</mobile_callable>
+        <name>PortalPagamentos</name>
+        <sandbox_callable>false</sandbox_callable>
+        <script><![CDATA[var PortalPagamentos = Class.create();
+
+PortalPagamentos.prototype = {
+
+    /**
+     * Construtor da classe PortalPagamentos
+     * Inicializa uma nova instância do portal de pagamentos
+     */
+    initialize: function() {
+        // Construtor vazio - pode ser expandido conforme necessário
+    },
+
+    /**
+     * Verifica se uma solicitação deve exibir o botão de pagamento
+     *
+     * Regras de validação:
+     * - Deve ser um item do catálogo de Ações Comerciais (ID específico)
+     * - Deve ter ao menos um anexo associado
+     *
+     * @param {GlideRecord} current - Registro atual da solicitação
+     * @returns {boolean} true se deve mostrar o botão, false caso contrário
+     *
+     * @example
+     * var portal = new PortalPagamentos();
+     * var showButton = portal.showRequestPayment(current);
+     */
+    showRequestPayment: function(current) {
+
+        // ID fixo do catálogo de Ações Comerciais
+        var COMMERCIAL_ACTIONS_CATALOG_ID = '9e36df5a1bbf491459868590f54bcbc9';
+
+        // Verifica se é o item de catálogo correto
+        var isCatItem = current.cat_item == COMMERCIAL_ACTIONS_CATALOG_ID;
+
+        // Verifica se possui anexos
+        var hasAtt = this._hasAttachment(current.getTableName(), current.getUniqueValue());
+
+        // Verifica se há conta selecionada
+        var cnpj = false;
+
+        if (isCatItem)
+            cnpj = !gs.nil(current.variables.u_dados_bancarios.u_cnpj_conta[0]);
+
+        //return (isCatItem === true && hasAtt === true && cnpj === true);
+        return (isCatItem === true && hasAtt == "true" && cnpj === true);
+    },
+
+    /**
+     * Processa uma solicitação de pagamento e retorna os dados necessários
+     *
+     * Coleta informações de:
+     * - Empresa (baseada no código SAP 0625)
+     * - Divisão (baseada no código SAP 6250)
+     * - Fornecedor (baseado no CNPJ dos dados bancários)
+     * - Arquivos anexos (upload para o portal)
+     *
+     * @param {GlideRecord} current - Registro atual da solicitação
+     * @returns {string} JSON com os dados processados ou erro
+     *
+     * @example
+     * var portal = new PortalPagamentos();
+     * var paymentData = portal.requestPayment(current);
+     * var data = JSON.parse(paymentData);
+     */
+    requestPayment: function(current) {
+        try {
+            // Busca dados da empresa
+            //var company = this._getIdCompany();
+            /*
+            if (!company.success) {
+                throw new Error('Erro ao buscar empresa: ' + company.message);
+            }*/
+
+            // Busca dados da divisão
+            //var division = this._getIdDivision(company.payload.idEmpresa.toString());
+            /*
+if (!division.success) {
+                throw new Error('Erro ao buscar divisão: ' + division.message);
+            }*/
+
+            // Extrai e limpa o CNPJ dos dados bancários
+            var cnpj = current.variables.u_dados_bancarios.u_cnpj_conta[0]
+                .toString()
+                .replaceAll('.', '')
+                .replaceAll('/', '')
+                .replaceAll('-', '');
+            var _agencia = current.variables.u_dados_bancarios.u_agencia[0].toString();
+            var _contaCorrente = current.variables.u_dados_bancarios.u_conta_corrente[0].toString();
+            var _banco = current.variables.u_dados_bancarios[0].u_banco.toString();
+
+            // Busca dados do fornecedor
+            var supplier = this._getInfoSuppliers(cnpj);
+
+
+            if (!supplier.success) {
+                var result = {
+                    supplier: supplier
+                };
+
+                var messageSupplier = 'O Fornecedor informado não se encontra cadastrado.\n' +
+                    JSON.stringify(result);
+
+                this._insertWorkNotes(current.getUniqueValue(), messageSupplier.toString());
+this._updateReason(current.getUniqueValue(), '14');
+
+                return JSON.stringify(result);
+            }
+
+            // Busca anexos e faz upload
+
+            var attachments = this._getSysIdAttachment(current.getTableName(), current.getUniqueValue());
+            var upload = [];
+
+            attachments.forEach(attachment => {
+                var uploadResult = this._uploadFile(attachment.toString());
+
+                if (uploadResult.success)
+                    upload.push(uploadResult.payload);
+                else {
+                    var result = {
+                        upload: uploadResult
+                    };
+                    var messageUpload = 'Houve um erro no envio do anexo para o portal. Verifique se o arquivo é um pdf válido, ou seja, não é um pdf gerado a partir de uma foto, por exemplo.\n' +
+                        JSON.stringify(result);
+
+                    this._insertWorkNotes(current.getUniqueValue(), messageUpload.toString());
+                    return JSON.stringify(result);
+                }
+            });
+
+            var bank = this._getBanks(_banco);
+            var idSupplier;
+
+            for (var i = 0; i < supplier.payload.length; i++) {
+
+                var account = this._getAccountsSupplier(supplier.payload[i].idSap.toString(), bank.payload.nmBanco.toString(), _agencia, _contaCorrente);
+
+                if (account.success)
+                    idSupplier = supplier.payload[i].idSap.toString();
+
+                if (account.success == false) {
+                    var _conta;
+                    var _digito;
+
+                    if (_contaCorrente.includes('-')) {
+                        _conta = _contaCorrente.split('-')[0];
+                        _digito = _contaCorrente.split('-')[1];
+                    }
+
+                    var bankAccount = this._createAccount(bank.payload.idBanco.toString(), _agencia, _digito.toString(), supplier.payload[i].idSap.toString(), _conta.toString());
+
+                    if (!bankAccount.success) {
+                        result = {
+                            bankAccount: bankAccount
+                        };
+
+                        var messageBankAccount = 'Houve um erro no cadastro automático da conta informada. Favor, entrar em contato com a equipe responsável.\n' +
+                            JSON.stringify(result);
+
+                        this._insertWorkNotes(current.getUniqueValue(), messageBankAccount.toString());
+
+                        return JSON.stringify(result);
+                    }
+                }
+            }
+
+            var _dataDocFormatada = current.getValue('u_data_recibo_acoes_comerciais') + 'T00:00:00';
+            var _numRecibo = current.u_numero_recibo_acoes_comerciais.toString();
+            var _valRecibo = current.u_valor_recibo_acoes_comerciais.toString();
+            var _ticketNumber = current.number.toString();
+            var _commercial_action = current.getDisplayValue('variables.u_commercial_actions');
+
+            var _payload = this._doMountPaymentPayload(idSupplier.toString(), _numRecibo.toString(), _valRecibo.toString(), _dataDocFormatada.toString(), _ticketNumber.toString(), _banco.toString(), _agencia.toString(), _contaCorrente.toString(), upload[0], _commercial_action.toString());
+
+            var _request = this._createRequestToPayment(_payload);
+
+            // Monta resultado final
+            return JSON.stringify(_request);
+        } catch (error) {
+            this._createErrorResponse('REQUEST_PAYMENT_ERROR', 'Erro ao tentar solicitar o pagamento ' + ex.message);
+        }
+    },
+
+    /**
+     * Verifica se um registro possui anexos
+     *
+     * @private
+     * @param {string} tableName - Nome da tabela
+     * @param {string} tableSysId - Sys ID do registro
+     * @returns {string} 'true' se possui anexos, 'false' caso contrário
+     */
+    _hasAttachment: function(tableName, tableSysId) {
+        var grAtt = new GlideRecord('sys_attachment');
+        grAtt.addQuery('table_name', tableName);
+        grAtt.addQuery('table_sys_id', tableSysId);
+        grAtt.query();
+
+        return grAtt.hasNext().toString();
+    },
+
+    /**
+     * Retorna lista de Sys IDs dos anexos de um registro
+     *
+     * @private
+     * @param {string} tableName - Nome da tabela
+     * @param {string} tableSysId - Sys ID do registro
+     * @returns {Array<string>} Array com os Sys IDs dos anexos
+     */
+    _getSysIdAttachment: function(tableName, tableSysId) {
+        var files = [];
+        var grAtt = new GlideRecord('sys_attachment');
+
+        grAtt.addQuery('table_name', tableName);
+        grAtt.addQuery('table_sys_id', tableSysId);
+        grAtt.query();
+
+        while (grAtt.next()) {
+            files.push(grAtt.getUniqueValue());
+        }
+
+        return files;
+    },
+
+    /**
+     * Busca o ID da empresa no Portal de Pagamentos
+     *
+     * Procura pela empresa com código SAP '0625' na lista retornada pela API
+     *
+     * @private
+     * @returns {Object} Objeto com success, message e code da empresa
+     * @throws {Error} Se houver erro na comunicação com a API
+     */
+    _getIdCompany: function() {
+        var result = {
+            success: false,
+            message: '',
+            payload: null
+        };
+
+        try {
+            // Configura requisição REST
+            var r = new sn_ws.RESTMessageV2('BPMM - Portal de Pagamentos', 'Busca de Empresas');
+            r.setStringParameterNoEscape('key', gs.getProperty('com.BPMM.portal.pagamento.key'));
+            r.setStringParameterNoEscape('host', gs.getProperty('com.BPMM.portal.pagamento.url'));
+            r.setEccParameter('skip_sensor', true);
+
+            // Executa requisição
+            var response = r.execute();
+            var responseBody = response.getBody();
+            var httpStatus = response.getStatusCode();
+
+            result.success = httpStatus == 200;
+            result.message = httpStatus == 200 ? '' : responseBody;
+
+            if (httpStatus == 200) {
+                var companies = JSON.parse(responseBody);
+
+                //Busca empresa específica com código SAP 0625
+                result.payload = companies.find(c => c.nrEmpresaSap == '0625');
+
+                if (!result.code) {
+                    this._createErrorResponse('COMPANY_ERROR', 'Algum erro foi encontrado no consumo do serviço. ' + responseBody);
+                }
+            }
+
+        } catch (ex) {
+            this._createErrorResponse('COMPANY_ERROR', 'Erro ao tentar buscar as empresas ' + ex.message);
+        }
+
+        return result;
+    },
+
+    /**
+     * Busca o ID da divisão no Portal de Pagamentos BPMM
+     *
+     * Procura pela divisão com código SAP '6250' para a empresa informada
+     *
+     * @private
+     * @param {string} idCompany - ID da empresa
+     * @returns {Object} Objeto com success, message e code da divisão
+     * @throws {Error} Se houver erro na comunicação com a API
+     */
+    _getIdDivision: function(idCompany) {
+        var result = {
+            success: false,
+            message: '',
+            payload: null
+        };
+
+        try {
+            // Configura requisição REST
+            var r = new sn_ws.RESTMessageV2('BPMM - Portal de Pagamentos', 'Busca de Divisão');
+            r.setStringParameterNoEscape('id_empresa', idCompany.toString());
+            r.setStringParameterNoEscape('key', gs.getProperty('com.BPMM.portal.pagamento.key'));
+            r.setStringParameterNoEscape('host', gs.getProperty('com.BPMM.portal.pagamento.url'));
+            r.setEccParameter('skip_sensor', true);
+
+            // Executa requisição
+            var response = r.execute();
+            var responseBody = response.getBody();
+            var httpStatus = response.getStatusCode();
+
+            result.success = httpStatus == 200;
+            result.message = httpStatus == 200 ? '' : responseBody;
+
+            if (httpStatus == 200) {
+                var divisions = JSON.parse(responseBody);
+
+                // Busca divisão específica com código SAP 6250
+                result.payload = divisions.find(d => d.nmDivisaoSap === '6250');
+
+                if (!result.code) {
+                    this._createErrorResponse(httpStatus, 'Algum erro foi encontrado no consumo do serviço. ' + responseBody);
+                }
+            }
+
+        } catch (ex) {
+            this._createErrorResponse(500, 'Erro ao tentar consultar a divisao da conta ' + ex.message);
+        }
+
+        return result;
+    },
+
+    /**
+     * Busca informações do fornecedor no Portal de Pagamentos BPMM
+     *
+     * @private
+     * @param {string} cnpj - CNPJ do fornecedor (apenas números)
+     * @returns {Object} Objeto com success, message e code do fornecedor
+     * @throws {Error} Se houver erro na comunicação com a API
+     */
+    _getInfoSuppliers: function(cnpj) {
+        var result = {
+            success: false,
+            message: '',
+            payload: null
+        };
+
+        try {
+            // Configura requisição REST
+            var r = new sn_ws.RESTMessageV2('BPMM - Portal de Pagamentos', 'Busca de Fornecedores');
+            r.setStringParameterNoEscape('cnpj', cnpj.toString());
+            r.setStringParameterNoEscape('key', gs.getProperty('com.BPMM.portal.pagamento.key'));
+            r.setStringParameterNoEscape('host', gs.getProperty('com.BPMM.portal.pagamento.url'));
+            r.setEccParameter('skip_sensor', true);
+
+            // Executa requisição
+            var response = r.execute();
+            var responseBody = response.getBody();
+            var httpStatus = response.getStatusCode();
+
+            result.success = httpStatus == 200 ? true : false;
+            result.message = httpStatus == 200 ? '' : "Erro na consulta do Fornecedor";
+
+            if (httpStatus == 200) {
+                var supplier = JSON.parse(responseBody);
+                result.payload = supplier;
+            } else
+                this._createErrorResponse(httpStatus, 'Erro na consulta do fornecedor: ' + JSON.parse(responseBody).title.toString());
+
+        } catch (ex) {
+            this._createErrorResponse(500, 'Erro na consulta do fornecedor: ' + ex.message);
+        }
+
+        return result;
+    },
+
+    /**
+     * Faz upload de um arquivo para o Portal de Pagamentos BPMM
+     *
+     * Constrói uma requisição multipart/form-data e envia o arquivo
+     *
+     * @private
+     * @param {string} sysId - Sys ID do anexo na tabela sys_attachment
+     * @returns {Object} Objeto com success, message e code do arquivo no portal
+     * @throws {Error} Se houver erro no upload ou processamento do arquivo
+     */
+    _uploadFile: function(sysId) {
+        var result = {
+            success: false,
+            message: '',
+            payload: null
+        };
+
+        try {
+            // Configura requisição REST
+            var r = new sn_ws.RESTMessageV2("BPMM - Portal de Pagamentos", "Upload de Anexos do pagamento");
+            r.setStringParameterNoEscape("key", gs.getProperty("com.BPMM.portal.pagamento.key"));
+            r.setStringParameterNoEscape("host", gs.getProperty("com.BPMM.portal.pagamento.url"));
+            r.setEccParameter("skip_sensor", true);
+
+            // Obtém dados do arquivo
+            var fileData = this._getAttachmentData(sysId.toString());
+            if (!fileData.success) {
+                return fileData; // Retorna o erro
+            }
+
+            // Prepara requisição multipart
+            var boundary = "ServiceNow-Upload-" + gs.generateGUID();
+            var multipartBody = this._buildMultipartBody(fileData, boundary);
+
+            r.setRequestHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
+            r.setRequestBody(multipartBody.toString());
+
+            // Executa upload
+            var response = r.execute();
+            var responseBody = response.getBody();
+            var httpStatus = response.getStatusCode();
+
+            result.success = httpStatus == 200;
+            result.message = httpStatus == 200 ? '' : responseBody;
+
+            if (httpStatus == 200) {
+                var fileResult = JSON.parse(responseBody);
+
+                fileResult[0].dtUpload = new GlideDateTime().toString().replace(' ', 'T') + '.992Z';
+                fileResult[0].idTipoDocumento = 1;
+
+                result.payload = fileResult;
+            } else this._createErrorResponse('UPLOAD_ERROR', 'Houve um erro de consumo do serviço de upload (' + httpStatus + ') ' + responseBody);
+
+        } catch (ex) {
+            this._createErrorResponse('UPLOAD_ERROR', 'Erro ao tentar realizar o upload do arquivo ' + ex.message);
+        }
+
+        return result;
+    },
+
+    /**
+     * Constrói o corpo da requisição multipart/form-data
+     *
+     * Monta o formato necessário para upload de arquivos via HTTP
+     * incluindo headers, boundaries e conteúdo do arquivo
+     *
+     * @private
+     * @param {Object} fileData - Dados do arquivo obtidos de _getAttachmentData
+     * @param {string} boundary - String única para delimitar as partes do multipart
+     * @returns {string} Corpo da requisição formatado
+     */
+    _buildMultipartBody: function(fileData, boundary) {
+        var CRLF = "\r\n";
+        var body = "";
+
+        // Adiciona seção do arquivo
+        body += "--" + boundary + CRLF;
+        body += 'Content-Disposition: form-data; name="files"; filename="' +
+            fileData.data.fileName.toString() + '"' + CRLF;
+        body += "Content-Type: " + fileData.data.contentType.toString() + CRLF;
+        body += CRLF;
+
+        // Adiciona conteúdo do arquivo (convertido para string)
+        body += this._sanitizeXML(new String(Packages.java.lang.String(fileData.data.content)));
+        body += CRLF;
+
+        // Finaliza multipart
+        body += "--" + boundary + "--" + CRLF;
+
+        return body;
+    },
+
+    /**
+     * Obtém dados completos de um anexo da tabela sys_attachment
+     *
+     * Recupera metadados e conteúdo binário do arquivo, com validações
+     * de existência, tamanho e integridade
+     *
+     * @private
+     * @param {string} attachmentSysId - Sys ID do anexo
+     * @returns {Object} Objeto com success e dados do arquivo ou erro
+     */
+    _getAttachmentData: function(attachmentSysId) {
+        try {
+            // Busca registro do anexo
+            var attachmentGR = new GlideRecord("sys_attachment");
+            if (!attachmentGR.get(attachmentSysId)) {
+                return this._createErrorResponse(
+                    "ATTACHMENT_NOT_FOUND",
+                    "Anexo não encontrado: " + attachmentSysId
+                );
+            }
+
+            // Valida se anexo não está vazio
+            if (!attachmentGR.size_bytes || attachmentGR.size_bytes == "0") {
+                return this._createErrorResponse(
+                    "EMPTY_ATTACHMENT",
+                    "Anexo está vazio ou corrompido"
+                );
+            }
+
+            // Obtém conteúdo binário do arquivo
+            var attachmentStream = new GlideSysAttachment();
+            var fileContent = attachmentStream.getBytes(attachmentGR);
+
+            if (!fileContent || fileContent.length === 0) {
+                return this._createErrorResponse(
+                    "FILE_READ_ERROR",
+                    "Erro ao ler conteúdo do arquivo"
+                );
+            }
+
+            // Retorna dados completos do arquivo
+            return {
+                success: true,
+                data: {
+                    sysId: attachmentGR.sys_id.toString(),
+                    fileName: attachmentGR.file_name.toString(),
+                    contentType: attachmentGR.content_type.toString(),
+                    sizeBytes: parseInt(attachmentGR.size_bytes.toString()),
+                    content: fileContent,
+                    tableName: attachmentGR.table_name.toString(),
+                    tableSysId: attachmentGR.table_sys_id.toString(),
+                },
+            };
+
+        } catch (error) {
+            return this._createErrorResponse(
+                "ATTACHMENT_READ_ERROR",
+                "Erro ao acessar anexo: " + error.message
+            );
+        }
+    },
+
+    /**
+     * Cria um objeto de resposta padronizado para erros
+     *
+     * @private
+     * @param {string} errorCode - Código do erro
+     * @param {string} errorMessage - Mensagem descritiva do erro
+     * @returns {Object} Objeto de erro padronizado
+     */
+    _createErrorResponse: function(errorCode, errorMessage) {
+        gs.error('Portal Pagamentos - ' + errorCode + ': ' + errorMessage);
+        return {
+            success: false,
+            errorCode: errorCode,
+            message: errorMessage
+        };
+    },
+
+    /**
+     * Remove caracteres de controle XML inválidos de uma string
+     *
+     * Necessário para garantir que o conteúdo do arquivo não contenha
+     * caracteres que possam quebrar o formato XML/HTTP
+     *
+     * @private
+     * @param {string} input - String a ser sanitizada
+     * @returns {string} String sem caracteres de controle inválidos
+     */
+    _sanitizeXML: function(input) {
+        // Remove caracteres de controle ASCII 0-8, 11, 12, 14-31
+        return input.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
+    },
+    /**
+     * Busca todas as contas cadatradas para o fornecedor no Portal de Pagamentos BPMM
+     *
+     * @private
+     * @param {string} sapId - ID pertencente ao SAP do fornecedor (apenas números)
+     * @returns {Object} Objeto com success, message e code do fornecedor
+     * @throws {Error} Se houver erro na comunicação com a API
+     */
+    _getAccountsSupplier: function(sapId, nBank, nAgency, nAccount) {
+        var result = {
+            success: false,
+            message: '',
+            payload: null
+        };
+
+        var account;
+        var digit;
+
+        try {
+            // Configura requisição REST
+            var r = new sn_ws.RESTMessageV2('BPMM - Portal de Pagamentos', 'Busca de Contas de Fornecedor');
+
+            r.setStringParameterNoEscape('id', sapId);
+            r.setStringParameterNoEscape('key', gs.getProperty('com.BPMM.portal.pagamento.key'));
+            r.setStringParameterNoEscape('host', gs.getProperty('com.BPMM.portal.pagamento.url'));
+            r.setEccParameter('skip_sensor', true);
+
+            // Executa requisição
+            var response = r.execute();
+            var responseBody = response.getBody();
+            var httpStatus = response.getStatusCode();
+
+            if (nAccount.includes('-')) {
+                account = nAccount.split('-')[0];
+                digit = nAccount.split('-')[1];
+            }
+
+            result.message = httpStatus == 200 ? '' : responseBody;
+
+            if (httpStatus == 200) {
+                var contas = JSON.parse(responseBody);
+
+                gs.info('Retorno: ' + responseBody);
+
+                for (var i = 0; i < contas.length; i++) {
+                    if (gs.nil(digit)) {
+                        if (contas[i].nmBanco.toString() == nBank.toString() && contas[i].nrConta.toString() == account.toString() && contas[i].nrAgencia.toString() == nAgency.toString()) {
+                            result.payload = contas[i];
+                            result.success = true;
+
+                            return result;
+                        }
+                    } else {
+                        if (digit.toString() == contas[i].nrDigitoConta.toString() && contas[i].nmBanco.toString() == nBank.toString() && contas[i].nrConta.toString() == account.toString() && contas[i].nrAgencia.toString().trim() == nAgency.toString().trim()) {
+                            result.payload = contas[i];
+                            result.success = true;
+
+                            return result;
+                        }
+                    }
+                }
+            }
+        } catch (ex) {
+            this._createErrorResponse('ACCOUNT_SUPPLIER_ERROR', 'Erro ao tentar buscar as contas de fornecedor ' + ex.message);
+        }
+        return result;
+    },
+    /**
+     * Busca todas os bancos cadastrados no SAP para o Portal de Pagamentos BPMM
+     *
+     * @private
+     * @param {string} nBank - ID pertencente ao Banco do fornecedor (apenas números) que desejamos pesquisar
+     * @returns {Object} Objeto com success, message e code do fornecedor
+     * @throws {Error} Se houver erro na comunicação com a API
+     */
+    _getBanks: function(nBank) {
+        var result = {
+            success: false,
+            message: '',
+            payload: null
+        };
+
+        try {
+            // Configura requisição REST
+            var r = new sn_ws.RESTMessageV2('BPMM - Portal de Pagamentos', 'Busca de Bancos Cadastrados');
+
+            r.setStringParameterNoEscape('key', gs.getProperty('com.BPMM.portal.pagamento.key'));
+            r.setStringParameterNoEscape('host', gs.getProperty('com.BPMM.portal.pagamento.url'));
+            r.setEccParameter('skip_sensor', true);
+
+            // Executa requisição
+            var response = r.execute();
+            var responseBody = response.getBody();
+            var httpStatus = response.getStatusCode();
+
+            result.success = httpStatus == 200;
+            result.message = httpStatus == 200 ? '' : responseBody;
+
+            if (httpStatus == 200) {
+                var bancos = JSON.parse(responseBody);
+
+                result.payload = bancos.find(c => c.nrBanco === nBank);
+            }
+        } catch (ex) {
+            this._createErrorResponse('BANK_ERROR', 'Erro ao tentar buscar a lista de bancos ' + ex.message);
+        }
+
+        return result;
+    },
+    /**
+     * Cria conta para o fornecedor cadastrado no SAP para prover pagamento pelo Portal de Pagamentos BPMM
+     *
+     * @private
+     * @param {string} idBanco - ID pertencente ao banco do fornecedor cadastrado no portal de Pagamentos (apenas números)
+     * @param {string} NrAgencia - Número da agencia pertencente ao banco do fornecedor (apenas números)
+     * @param {string} digitoConta - Dígito da conta pertencente ao banco do fornecedor (apenas números)
+     * @param {string} idSap - ID pertencente ao SAP do fornecedor (apenas números)
+     * @param {string} nrConta - Número pertencente da conta do fornecedor (apenas números)  
+     * @returns {Object} Objeto com success, message e code do fornecedor
+     * @throws {Error} Se houver erro na comunicação com a API
+     */
+    _createAccount: function(idBanco, nrAgencia, digitoConta, idSap, nrConta) {
+        var result = {
+            success: false,
+            message: '',
+            payload: null
+        };
+
+        try {
+            // Configura requisição REST
+            var r = new sn_ws.RESTMessageV2('BPMM - Portal de Pagamentos', 'Cadastrar Contas de Fornecedor');
+
+            r.setStringParameterNoEscape('idBanco', idBanco.toString());
+            r.setStringParameterNoEscape('host', gs.getProperty('com.BPMM.portal.pagamento.url'));
+            r.setStringParameterNoEscape('nrAgencia', nrAgencia.toString());
+            r.setStringParameterNoEscape('digitoConta', gs.nil(digitoConta.toString()) ? '' : digitoConta.toString());
+            r.setStringParameterNoEscape('key', gs.getProperty('com.BPMM.portal.pagamento.key'));
+            r.setStringParameterNoEscape('idSAP', idSap.toString());
+            r.setStringParameterNoEscape('nrConta', nrConta.toString());
+            r.setEccParameter('skip_sensor', true);
+
+            // Executa requisição
+            var response = r.execute();
+            var responseBody = response.getBody();
+            var httpStatus = response.getStatusCode();
+
+            result.success = httpStatus == 200;
+            result.message = httpStatus == 200 ? '' : responseBody;
+
+            if (httpStatus == 200) {
+                var conta = JSON.parse(responseBody);
+                if (!conta.status)
+                    this._createErrorResponse('ACCOUNT_ERROR', 'Erro ao tentar criar a conta: ' + ex.message);
+
+                result.payload = conta;
+            }
+        } catch (ex) {
+            this._createErrorResponse('ACCOUNT_ERROR', 'Erro ao tentar criar a conta: ' + ex.message);
+        }
+
+        return result;
+    },
+    _createRequestToPayment: function(requestPayload) {
+        var result = {
+            success: false,
+            message: '',
+            payload: null
+        };
+
+
+        try {
+            var r = new sn_ws.RESTMessageV2('BPMM - Portal de Pagamentos', 'Requisitar Pagamento');
+
+            r.setStringParameterNoEscape('host', gs.getProperty('com.BPMM.portal.pagamento.url'));
+            r.setStringParameterNoEscape('key', gs.getProperty('com.BPMM.portal.pagamento.key'));
+            r.setRequestBody(JSON.stringify(requestPayload));
+
+            var response = r.execute();
+            var responseBody = response.getBody();
+            var httpStatus = response.getStatusCode();
+
+            result.success = httpStatus == 200;
+            result.message = httpStatus == 200 ? '' : 'Erro ao tentar criar a requisição de pagamento: Code [' + httpStatus + '] - ' + responseBody;
+            result.payload = httpStatus == 200 ? responseBody : '';
+
+        } catch (ex) {
+            this._createErrorResponse('PAYMENT_ERROR', 'Erro ao tentar criar a requisição de pagamento: ' + ex.message);
+        }
+
+        return result;
+    },
+
+    _doMountPaymentPayload(idSapSupplier, docNumber, docValue, docDate, ticketNumber, banco, agencia, conta, anexo, areaPagamento) {
+        var impostos = [];
+        var itens = [{
+            VlUnitarioItemNota: parseFloat(docValue.toString().replace(',', '.')),
+            VlTotalItemNota: parseFloat(docValue.toString().replace(',', '.')),
+            NrQtdItemNota: 1,
+            DsItemNota: ticketNumber.toString(),
+            VlPercentual: 100,
+            Rateios: [{
+                VlRateio: parseFloat(docValue.toString().replace(',', '.')),
+                VlPercentual: 100,
+                nrColetorCusto: '2323232',
+                idTipoColetorCusto: 2
+            }]
+        }];
+        var documentos = anexo;
+        var parcelas = [{
+            IdFormaPagamento: 2,
+            IdStatusParcela: 1,
+            VlParcela: parseFloat(docValue.toString().replace(',', '.')),
+            DtEmissaoParcela: docDate.toString(),
+            //DtVencimentoParcela: this._addBusinessDays(docDate, 10).toString().replace(' ', 'T'), Não necessário mais. Será enviado, no momento da atualização do id do lote
+            NrOrdemParcela: 1,
+            NrBancoFavorecido: banco.toString(),
+            NrAgenciaFavorecido: agencia.toString(),
+            NrContaFavorecido: conta.toString().split('-')[0],
+            NrDigitoContaFavorecido: conta.toString().split('-')[1],
+            NrLinhaDigitavel: '',
+            Documentos: []
+        }];
+
+        var payload = {
+            NrEmpresaSap: "0625",
+NrDivisaoSap: "6250",
+            NmAreaPagamento: areaPagamento,
+            IdSapFornecedor: idSapSupplier.toString(),
+            NrNotaFiscal: docNumber.toString(),
+            NrQtdParcelas: 1,
+            IdUsuarioResponsavel: 0,
+            IdUsuarioSolicitante: 0,
+            NmEmailUsuarioResponsavel: "",
+            NmEmailUsuarioSolicitante: "",
+            VlBrutoPagamento: parseFloat(docValue.toString().replace(',', '.')),
+            VlLiquidoPagamento: parseFloat(docValue.toString().replace(',', '.')),
+            DtEmissaoNotaFiscal: docDate.toString(), //"2025-01-09T00:00:00",
+            DsPagamento: ticketNumber.toString(),
+            DsComentario: ticketNumber.toString(),
+            NrContrato: ticketNumber.toString(),
+            Parcelas: parcelas,
+            Impostos: [],
+            Itens: itens,
+            Documentos: documentos
+        };
+
+        return payload;
+    },
+    _isBusinessDay: function(pDate, pHolidays) {
+        var dayOfWeek = parseInt(new GlideDateTime(pDate).getDayOfWeekLocalTime());
+        var dateString = new GlideDateTime(pDate);
+
+        if (dayOfWeek == 5 || dayOfWeek == 6)
+            return false;
+
+        if (pHolidays.includes(dateString))
+            return false;
+
+        return true;
+    },
+    _addBusinessDays: function(initialDate, businessDaysToAdd) {
+        var workingDate = new GlideDateTime(initialDate);
+        var daysAdded = 0;
+        var holidays = (function() {
+            var feriados = new GlideRecord('cmn_schedule_span');
+            var lista = [];
+
+            feriados.addEncodedQuery('schedule=39f603e41b3a74100d5e11712b4bcb9a');
+            feriados.query();
+
+            while (feriados.next()) {
+                if (feriados.type == 'exclude') {
+                    var _dataformatBrasil = feriados.getDisplayValue('end_date_time').substring(0, 5) + '/' + new GlideDate().getYear();
+                    var _dataPadrao = _dataformatBrasil.split('/')[2] + '-' + _dataformatBrasil.split('/')[1] + '-' + _dataformatBrasil.split('/')[0];
+
+                    lista.push(_dataPadrao);
+                }
+            }
+
+            return lista;
+        })();
+
+        while (daysAdded < businessDaysToAdd) {
+            workingDate.addDaysLocalTime(1);
+
+            if (this._isBusinessDay(workingDate, holidays)) {
+                daysAdded++;
+            }
+        }
+
+        return workingDate;
+    },
+    _insertWorkNotes: function(record, message) {
+        var grRITM = new GlideRecord('sc_req_item');
+
+        if (grRITM.get(record)) {
+            grRITM.work_notes = message.toString();
+            grRITM.update();
+        }
+    },
+    _updateReason: function(record, value) {
+        var grRITM = new GlideRecord('sc_req_item');
+
+        if (grRITM.get(record)) {
+            grRITM.setValue('u_reason_to_be_on_hold', value.toString());
+            grRITM.update();
+        }
+    },
+    // Identificador do tipo de classe para ServiceNow
+    type: 'PortalPagamentos'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-03-16 15:13:16</sys_created_on>
+        <sys_id>f93590e7c3e372500a815d02b4013102</sys_id>
+        <sys_mod_count>1</sys_mod_count>
+        <sys_name>PortalPagamentos</sys_name>
+        <sys_package display_value="TEST" source="x_107457_test">cbd2452dc363b2100a815d02b4013107</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="TEST">cbd2452dc363b2100a815d02b4013107</sys_scope>
+        <sys_update_name>sys_script_include_f93590e7c3e372500a815d02b4013102</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-03-16 15:13:32</sys_updated_on>
+    </sys_script_include>
+</record_update>
