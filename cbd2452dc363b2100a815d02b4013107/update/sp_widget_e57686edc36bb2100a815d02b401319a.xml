@@ -1,7 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[api.controller = function($scope, spUtil) {
+        <client_script><![CDATA[/**
+ * @name prompt_record (sp_widget)
+ * @description Service Portal widget controller for viewing and editing a single Prompt record.
+ *
+ * Responsibilities:
+ * - Load a record by reading the `sys_id` URL parameter (server script).
+ * - Allow editing `prompt` and `result` fields and saving changes.
+ * - Trigger the AI integration (same behavior as the classic UI Action) and refresh the record.
+ *
+ * Actions (server calls via spUtil.get):
+ * - `process`: runs `x_107457_test.PromptUtils().execute(record)` and returns updated record.
+ * - `save`: updates `prompt` and `result` and returns updated record.
+ *
+ * UX:
+ * - Shows busy states for Save/Process, and surfaces server errors in `c.errorMessage`.
+ */
+api.controller = function($scope, spUtil) {
   var c = this;
 
   c.hasRecord = function() {
@@ -76,7 +92,26 @@
         <option_schema/>
         <public>false</public>
         <roles/>
-        <script><![CDATA[(function() {
+        <script><![CDATA[/**
+ * @name prompt_record (sp_widget) - Server script
+ * @description Loads a single Prompt record and handles process/save actions.
+ *
+ * URL contract:
+ * - Expects `sys_id` as a URL parameter: `/sp?id=prompt_record&sys_id=<sys_id>`
+ *
+ * Data contract:
+ * - Output:
+ *   - `data.record`: Populated record fields for rendering and editing
+ *   - `data.error`: Error message when missing/invalid sys_id or failed action
+ * - Input actions:
+ *   - `{ action: 'process', sys_id: <string> }`
+ *   - `{ action: 'save', sys_id: <string>, prompt: <string>, result: <string> }`
+ *
+ * Side effects:
+ * - `process`: updates the record after calling the configured integration (PromptUtils)
+ * - `save`: updates the record with new `prompt` / `result`
+ */
+(function() {
   // Read sys_id from URL: /sp?id=prompt_record&sys_id=...
   data.record = {};
 

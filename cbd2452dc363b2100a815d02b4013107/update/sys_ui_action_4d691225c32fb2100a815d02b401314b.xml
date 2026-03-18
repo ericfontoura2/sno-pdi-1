@@ -30,7 +30,22 @@
         <name>Process</name>
         <onclick/>
         <order>100</order>
-        <script><![CDATA[current.update();
+        <script><![CDATA[/**
+ * @name Process (sys_ui_action)
+ * @table x_107457_test_prompt
+ * @action_name process_ai
+ * @description Runs the AI integration for the current Prompt record and refreshes the form.
+ *
+ * Behavior:
+ * - Ensures the latest record state is persisted (`current.update()`).
+ * - Calls `x_107457_test.PromptUtils().execute(current)` to send `current.prompt` to the REST integration.
+ * - On success, `PromptUtils` updates `current.result` and persists the record.
+ * - Redirects back to the same record so the user sees the updated result.
+ *
+ * Visibility / condition:
+ * - Controlled by the UI Action condition (admin role + non-empty prompt).
+ */
+current.update();
 new x_107457_test.PromptUtils().execute(current);
 action.setRedirectURL(current);]]></script>
         <show_insert>false</show_insert>

@@ -9,10 +9,44 @@
         <mobile_callable>false</mobile_callable>
         <name>PromptUtils</name>
         <sandbox_callable>false</sandbox_callable>
-        <script><![CDATA[var PromptUtils = Class.create();
+        <script><![CDATA[/**
+ * @name x_107457_test.PromptUtils
+ * @class
+ * @classdesc Utility functions for processing Prompt records (`x_107457_test_prompt`).
+ *
+ * This Script Include is intended to be called from server-side contexts such as UI Actions
+ * or Service Portal widgets. It sends the prompt content to a configured REST Message and
+ * writes the returned response into the record's `result` field.
+ *
+ * Prerequisites / configuration:
+ * - REST Message: `HuggingFaceAI` (HTTP Method: `Default`)
+ * - System property: `x_107457_test.huggingface_ai.token` (Bearer token)
+ * - Optional system property: `x_107457_test.huggingface_ai.max_tokens` (defaults to 500)
+ *
+ * @example
+ * var gr = new GlideRecord('x_107457_test_prompt');
+ * if (gr.get('<sys_id>')) {
+ *   new x_107457_test.PromptUtils().execute(gr);
+ * }
+ */
+var PromptUtils = Class.create();
 PromptUtils.prototype = {
+    /**
+     * Initializes the Script Include.
+     */
     initialize: function() {},
 
+    /**
+     * Executes the AI integration for a given Prompt record and updates the record with the result.
+     *
+     * Notes:
+     * - If the record has no `prompt` value, the method returns without doing anything.
+     * - On success, updates `promptGR.result` and persists the record.
+     * - On failure/unexpected response, adds an error message containing the raw response body.
+     *
+     * @param {GlideRecord} promptGR GlideRecord for table `x_107457_test_prompt` (must be a valid record).
+     * @returns {void}
+     */
     execute: function(promptGR) {
         if (!promptGR || !promptGR.prompt) {
             return;

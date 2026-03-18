@@ -1,7 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[api.controller = function($window, spUtil) {
+        <client_script><![CDATA[/**
+ * @name prompt_list (sp_widget)
+ * @description Service Portal widget controller for listing Prompt records and creating new ones.
+ *
+ * Responsibilities:
+ * - Render a list of `x_107457_test_prompt` records where `display_on_portal=true` (provided by the server script).
+ * - Provide a "Create New" modal that collects only the Prompt text.
+ * - Create a new record via a server call to this same widget and redirect to `prompt_record`.
+ *
+ * Navigation:
+ * - On successful creation, redirects to `/sp?id=prompt_record&sys_id=<new_sys_id>`.
+ *
+ * Dependencies:
+ * - `spUtil.get(widgetId, input)` for server calls
+ * - `$window.location.href` for navigation
+ */
+api.controller = function($window, spUtil) {
   var c = this;
 
   c.getBadgeClass = function(index) {
@@ -67,7 +83,23 @@
         <option_schema/>
         <public>false</public>
         <roles/>
-        <script><![CDATA[(function() {
+        <script><![CDATA[/**
+ * @name prompt_list (sp_widget) - Server script
+ * @description Loads Prompt records for portal display and handles creation requests.
+ *
+ * Data contract:
+ * - Output:
+ *   - `data.records`: Array of records to render in the list (ordered by newest first).
+ *   - `data.error`: Optional error message for create flow.
+ *   - `data.sys_id`: Newly created sys_id when `input.action === 'create'`.
+ * - Input:
+ *   - `{ action: 'create', prompt: <string> }` to create a new prompt record.
+ *
+ * Side effects (create):
+ * - Inserts a new record into `x_107457_test_prompt`
+ * - Sets `prompt`, `user` (current logged-in user), and `display_on_portal=true`
+ */
+(function() {
   // Server script: load prompt records for portal or create new one
   data.records = data.records || [];
 
